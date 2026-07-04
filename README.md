@@ -62,23 +62,45 @@ purs 0.15.x, spago@next, node, and a `z3` binary on the PATH.
 
 ```sh
 make examples          # compile examples/ to CoreFn (spago backend trick)
-make verify            # run the verifier over the demo module
+make verify            # verify every example module that has a .lps spec
 make test              # golden test
+make bundle            # standalone bin/lps.mjs (node, no spago needed)
 ```
 
 Direct invocation:
 
 ```sh
-spago run -- verify --output <output-dir> <ModuleName> [--spec <file.lps>]
+lps verify     --output <dir> <ModuleName> [--spec <file.lps>]
+               [--include <file.lps>]... [--smt2-dir <dir>]
+lps verify-all --output <dir> [--include <file.lps>]... [--smt2-dir <dir>]
 ```
 
-The spec file defaults to the module's source path with `.purs` → `.lps`.
+(`lps` = `spago run --` or `node bin/lps.mjs` after `make bundle`.)
 
-To emit CoreFn from any spago project, add a no-op backend to its
-`spago.yaml` (this is how `examples/` is set up):
+- The spec file defaults to the module's source path with `.purs` → `.lps`;
+  `verify-all` scans the output directory and verifies every module whose
+  spec file exists.
+- `--include` prepends shared spec corpora — start with `lib/prelude.lps`
+  (trusted `assume` specs for `min`, `max`, `abs`, `signum`, `clamp` on Int).
+- Specs are cross-checked against the module's `docs.json` type signatures:
+  arity or base-type disagreement fails the function before any solving.
+- `--smt2-dir` dumps every obligation as a replayable `.smt2` artifact.
+
+To emit CoreFn from any spago project, add a backend to its `spago.yaml`
+(this is how `examples/` is set up):
 
 ```yaml
 workspace:
   backend:
-    cmd: "true"
+    cmd: "true"   # no-op: just emit corefn.json
+```
+
+To verify on every build instead, make the verifier the backend:
+
+```yaml
+workspace:
+  backend:
+    cmd: "node"
+    args: [ "../bin/lps.mjs", "verify-all", "--output", "output",
+            "--include", "../lib/prelude.lps" ]
 ```

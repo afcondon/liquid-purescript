@@ -12,3 +12,9 @@ sign :: Int -> { s : Int | 0 - 1 <= s && s <= 1 }
 double :: { n : Int | n >= 0 } -> { v : Int | v >= n }
 
 low :: Int -> { v : Int | v <= 0 }
+
+-- Boolean result refinement
+flag :: { n : Int | n >= 0 } -> { b : Boolean | b }
+
+-- deliberate arity mismatch: caught by the docs.json cross-check
+once :: Int -> Int -> Nat

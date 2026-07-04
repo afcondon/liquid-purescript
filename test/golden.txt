@@ -1,3 +1,4 @@
+Demo.once  ? UNSUPPORTED — spec/type mismatch: spec has 2 argument(s) but the declared type has 1
 Demo.abs  ✓ SAFE
 Demo.bad  ✗ UNSAFE
     at src/Demo.purs:9:9
@@ -5,7 +6,8 @@ Demo.bad  ✗ UNSAFE
     counterexample: n = 0
 Demo.clamp  ✓ SAFE
 Demo.double  ✓ SAFE
-Demo.low  ? UNSUPPORTED — cannot embed call to Demo.min (outside the supported fragment)
+Demo.flag  ✓ SAFE
+Demo.low  ✓ SAFE
 Demo.sign  ✓ SAFE
 P1.callBad  ✗ UNSAFE
     at src/P1.purs:21:13

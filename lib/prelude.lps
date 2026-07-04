@@ -1,0 +1,18 @@
+-- Starter spec corpus for Prelude functions on Int (all `assume`: these
+-- are trusted characterizations of compiled library code, the .lps
+-- equivalent of Liquid Haskell's bundled Prelude specs).
+--
+-- Everything here stays inside QF_LIA. Specs are exact where that is
+-- cheap (min/max/abs pin the result to one of the inputs), conditional
+-- where the function is only sensible on part of its domain (clamp).
+
+assume min :: { a : Int } -> { b : Int } -> { v : Int | (v <= a && v <= b) && (v == a || v == b) }
+
+assume max :: { a : Int } -> { b : Int } -> { v : Int | (v >= a && v >= b) && (v == a || v == b) }
+
+assume abs :: { a : Int } -> { v : Int | v >= 0 && (v == a || v == 0 - a) }
+
+assume signum :: { a : Int } -> { v : Int | (a > 0 && v == 1) || (a == 0 && v == 0) || (a < 0 && v == 0 - 1) }
+
+-- Ord.clamp low hi x; bounded only when the interval is non-empty
+assume clamp :: { lo : Int } -> { hi : Int } -> { x : Int } -> { v : Int | (v == lo || v == hi || v == x) && (not (lo <= hi) || (lo <= v && v <= hi)) }

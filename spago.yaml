@@ -2,6 +2,11 @@ package:
   name: lps
   run:
     main: Lps.Main
+  bundle:
+    module: Lps.Main
+    outfile: bin/lps.mjs
+    platform: node
+    type: app
   dependencies:
     - prelude
     - effect

@@ -270,10 +270,16 @@ carrying instantiated postconditions; recursion by assuming the function's
 own spec; `assume` declarations matched through the float map; multi-
 scrutinee/Int-literal cases; `--smt2-dir` artifact dump. Call facts are
 scoped per path so a postcondition justified under one branch cannot leak
-into a sibling. See `examples/src/P1.{purs,lps}`. Remaining: signature
-cross-check against `docs.json`, `lps` as a spago backend cmd, recursive
-`let`, and a starter spec corpus for the Prelude functions the examples
-keep reaching for.
+into a sibling. See `examples/src/P1.{purs,lps}`.
+
+*Status 2026-07-04, later*: the rest landed — signature cross-check
+against `docs.json` (arity/base-type drift fails the function before
+solving), `verify-all` scanning the output dir for spec'd modules (the
+spago-backend shape; `make bundle` produces a standalone `bin/lps.mjs`),
+`--include` for shared spec corpora, and `lib/prelude.lps` seeding
+trusted specs for `min`/`max`/`abs`/`signum`/`clamp` on Int. Phase 1
+remaining: recursive `let` (needs local function specs — may fold into
+Phase 3), richer countermodel presentation.
 
 **Phase 2 — measures and data (6–8 wk).** ADT scrutinees and constructor
 binders; measures (`length`, user-defined) as uninterpreted functions with

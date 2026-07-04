@@ -22,3 +22,9 @@ double n = let m = n + n in m
 
 low :: Int -> Int
 low n = min n 0
+
+flag :: Int -> Boolean
+flag n = n >= 0
+
+once :: Int -> Int
+once n = n

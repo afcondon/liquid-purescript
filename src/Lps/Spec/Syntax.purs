@@ -8,10 +8,14 @@ module Lps.Spec.Syntax
   , trivial
   ) where
 
+import Prelude
+
 import Data.Map (Map)
 import Lps.Logic (Sort(..), Term, tTrue)
 
 data Base = BInt | BBool
+
+derive instance Eq Base
 
 baseSort :: Base -> Sort
 baseSort = case _ of
