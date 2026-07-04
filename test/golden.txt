@@ -20,3 +20,11 @@ P1.low2  ✓ SAFE
 P1.myAbs  ✓ SAFE
 P1.size  ✓ SAFE
 P1.sumTo  ✓ SAFE
+P2.append  ✓ SAFE
+P2.badCount  ✗ UNSAFE
+    at src/P2.purs:21:16
+    cannot prove: ($badCount1 == (len l))
+    counterexample: l = IntList!val!0, t = IntList!val!1, $badCount1 = 0, $f0 = 0
+P2.count  ✓ SAFE
+P2.headOr  ✓ SAFE
+P2.singleton  ✓ SAFE

@@ -18,6 +18,7 @@ data Binder
   = BLit Literal
   | BVar String
   | BNull
+  | BCtor String (Array Binder)
   | BOther String
 
 data AltResult

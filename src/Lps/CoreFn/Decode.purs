@@ -7,7 +7,6 @@ module Lps.CoreFn.Decode
 import Prelude
 
 import Data.Argonaut.Core (Json, caseJsonObject, toArray, toBoolean, toNumber, toString)
-import Data.Array as Array
 import Data.Either (Either(..), note)
 import Data.Int as Int
 import Data.Maybe (Maybe(..))
@@ -79,6 +78,10 @@ decodeBinder j = do
     "LiteralBinder" -> BLit <$> (field o "literal" >>= decodeLiteral)
     "VarBinder" -> BVar <$> strField o "identifier"
     "NullBinder" -> pure BNull
+    "ConstructorBinder" -> do
+      ctor <- field o "constructorName" >>= decodeQualified
+      subs <- field o "binders" >>= asArray >>= traverse decodeBinder
+      pure (BCtor ctor.ident subs)
     other -> pure (BOther other)
 
 decodeGuarded :: Json -> Dec { guard :: Expr, expr :: Expr }

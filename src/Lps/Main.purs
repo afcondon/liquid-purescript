@@ -29,12 +29,13 @@ import Effect.Console (error, log)
 import Lps.CoreFn.Decode (decodeModule)
 import Lps.CoreFn.Types (Module)
 import Lps.Docs (SigMap, crossCheck, readSigs)
+import Lps.Logic (Sort(..))
 import Lps.Logic.Smt as Smt
 import Lps.Report (FnVerdict(..), anyUnsafe, renderFn)
 import Lps.Solver.Z3 (Verdict(..), solve)
 import Lps.Spec.Parser (parseSpecFile)
-import Lps.Spec.Syntax (SpecFile)
-import Lps.Vc (Obligation, checkModule)
+import Lps.Spec.Syntax (SpecFile, baseSort)
+import Lps.Vc (Obligation, checkModule, discName)
 import Node.Encoding (Encoding(..))
 import Node.FS.Perms (permsAll)
 import Node.FS.Sync (exists, mkdir', readTextFile, readdir, writeTextFile)
@@ -179,13 +180,25 @@ readSigMap path = do
 verifyModule :: Args -> Module -> SpecFile -> Effect (Array FnVerdict)
 verifyModule a mod spec = do
   for_ a.smt2Dir \dir -> mkdir' dir { recursive: true, mode: permsAll }
+  let
+    sorts = Array.fromFoldable (Map.keys spec.datas)
+    funs =
+      ( Map.toUnfoldable spec.measures <#> \(Tuple name m) ->
+          { name, args: [ SData m.dataName ], res: baseSort m.result.base }
+      )
+        <>
+          ( do
+              Tuple dataName d <- Map.toUnfoldable spec.datas
+              c <- d.ctors
+              pure { name: discName c.name, args: [ SData dataName ], res: SBool }
+          )
   for (checkModule mod spec) \fn -> do
     let qualified = mod.name <> "." <> fn.fnName
     case fn.result of
       Left msg -> pure (Errored qualified msg)
       Right obligations -> do
         results <- forWithIndex obligations \i o -> do
-          let script = Smt.render { decls: o.decls, assumps: o.assumps, goal: o.goal }
+          let script = Smt.render { sorts, funs, decls: o.decls, assumps: o.assumps, goal: o.goal }
           for_ a.smt2Dir \dir ->
             writeTextFile UTF8
               (dir <> "/" <> mod.name <> "." <> fn.fnName <> "-" <> show i <> ".smt2")

@@ -286,6 +286,20 @@ binders; measures (`length`, user-defined) as uninterpreted functions with
 constructor axioms; `Array` refinements (`NonEmpty`); parametric polymorphism
 with trivially-lifted refinements; records (flat, no row-poly refinements yet).
 
+*Status 2026-07-04*: first cut landed — monomorphic inductive ADTs.
+`data` and `measure` declarations in `.lps`; data types are opaque SMT
+sorts; a constructor binder contributes an `is<Ctor>` discriminator, its
+siblings' negated discriminators, and each measure's equation for that
+constructor as path facts; constructor applications bind a fresh value
+with the same facts; measure result refinements are instantiated at every
+application site (keeping the logic quantifier-free); case on a measured
+sort assumes constructor exhaustiveness. `examples/src/P2.{purs,lps}`
+proves `count l == len l` and `len (append a b) == len a + len b`
+inductively, refutes `badCount`. Remaining in Phase 2: `Array`
+via a built-in `length` measure over literal/`assume`d arrays, parametric
+polymorphism (trivial lifting), selector-style access to constructor
+fields (needed for literal sub-patterns), records.
+
 **Phase 3 — higher-order (8–12 wk).** Abstract refinements, refinement
 inference for lambdas, `map`/`filter`/`fold` specs.
 

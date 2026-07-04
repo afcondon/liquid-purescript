@@ -5,15 +5,22 @@
 -- |
 -- | Phase 1: calls to spec'd functions emit precondition obligations at the
 -- | call site and bind a fresh result variable carrying the instantiated
--- | result refinement; recursive calls assume the function's own spec
--- | (standard partial-correctness reasoning). `assume` specs do the same
--- | for imported/FFI functions, on trust. Call facts are scoped to the
--- | path that made the call, so a spec assumption justified under one
--- | branch never leaks into a sibling branch.
+-- | result refinement; recursive calls assume the function's own spec.
+-- | `assume` specs do the same for imported/FFI functions, on trust. Call
+-- | facts are scoped to the path that made the call.
+-- |
+-- | Phase 2: user data types are opaque SMT sorts characterized by
+-- | measures. A constructor binder contributes an is<Ctor> discriminator
+-- | plus each measure's equation for that constructor as path facts; a
+-- | constructor application binds a fresh value with the same facts.
+-- | Measure result refinements (e.g. `len xs >= 0`) are instantiated at
+-- | every application occurring in an obligation — the standard move that
+-- | keeps the logic quantifier-free.
 module Lps.Vc
   ( Obligation
   , FnResult
   , checkModule
+  , discName
   ) where
 
 import Prelude
@@ -25,13 +32,13 @@ import Data.Either (Either(..))
 import Data.Foldable (foldM)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
-import Data.Traversable (for_, traverse)
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Traversable (for, for_, traverse)
 import Data.Tuple (Tuple(..))
 import Lps.CoreFn.Types (Alt, AltResult(..), Bind(..), Binder(..), Expr(..), Literal(..), Module, Qualified, Span, spanOf)
-import Lps.Logic (Op(..), Sort, Term(..), subst, sortOf, tTrue)
+import Lps.Logic (Op(..), Sort(..), Term(..), apps, subst, sortOf, tTrue)
 import Lps.Resolve (FloatMap, Prim(..), PrimTable, buildFloats, buildTable, resolveGlobal)
-import Lps.Spec.Syntax (FnSpec, RType, SpecFile, baseSort)
+import Lps.Spec.Syntax (Base, DataDef, FnSpec, MeasureDef, RType, SpecFile, baseSort)
 
 type Env = Map String Sort
 
@@ -47,12 +54,51 @@ type Obligation =
 
 type FnResult = { fnName :: String, result :: Either String (Array Obligation) }
 
+type CtorInfo = { dataName :: String, fields :: Array Base, siblings :: Array String }
+
 type St =
   { table :: PrimTable
   , floats :: FloatMap
   , modName :: String
   , spec :: SpecFile
+  , ctors :: Map String CtorInfo
+  , measuresByData :: Map String (Array MeasureDef)
+  , funSorts :: Map String Sort
   }
+
+mkSt :: Module -> SpecFile -> St
+mkSt mod spec =
+  { table: buildTable mod
+  , floats: buildFloats mod
+  , modName: mod.name
+  , spec
+  , ctors
+  , measuresByData
+  , funSorts
+  }
+  where
+  ctors = Map.fromFoldable do
+    Tuple dataName d <- Map.toUnfoldable spec.datas :: Array (Tuple String DataDef)
+    c <- d.ctors
+    pure $ Tuple c.name
+      { dataName
+      , fields: c.fields
+      , siblings: Array.filter (_ /= c.name) (map _.name d.ctors)
+      }
+
+  measuresByData = Array.foldl
+    (\acc (Tuple _ m) -> Map.insertWith (<>) m.dataName [ m ] acc)
+    Map.empty
+    (Map.toUnfoldable spec.measures :: Array (Tuple String MeasureDef))
+
+  funSorts = Map.fromFoldable $
+    map (\(Tuple name m) -> Tuple name (baseSort m.result.base))
+      (Map.toUnfoldable spec.measures :: Array (Tuple String MeasureDef))
+      <> map (\(Tuple name _) -> Tuple (discName name) SBool)
+        (Map.toUnfoldable ctors :: Array (Tuple String CtorInfo))
+
+discName :: String -> String
+discName ctor = "is" <> ctor
 
 -- | Generator state. `fresh` only ever grows; `vars`/`facts`/`obls` are
 -- | the call facts of the current scope (see `scoped`).
@@ -67,6 +113,12 @@ type M a = StateT GenSt (Either String) a
 
 throw :: forall a. String -> M a
 throw = lift <<< Left
+
+freshName :: String -> M String
+freshName base = do
+  s <- get
+  put s { fresh = s.fresh + 1 }
+  pure ("$" <> base <> show s.fresh)
 
 -- | Run a computation collecting its call facts separately, restoring the
 -- | enclosing scope's facts afterwards (the fresh counter carries through).
@@ -100,12 +152,7 @@ checkModule mod spec =
           { fresh: 0, vars: [], facts: [], obls: [] }
     }
   where
-  st =
-    { table: buildTable mod
-    , floats: buildFloats mod
-    , modName: mod.name
-    , spec
-    }
+  st = mkSt mod spec
 
   declMap :: Map String Expr
   declMap = Map.fromFoldable (Array.concatMap flat mod.decls)
@@ -119,8 +166,6 @@ checkFn st fnName fnSpec = peel [] emptyCtx fnSpec.args
   where
   emptyCtx = { env: Map.empty, assumps: [] }
 
-  -- Peel one lambda per spec argument, renaming spec binders to the
-  -- CoreFn binder names as we go.
   peel :: Array (Tuple String String) -> Ctx -> Array RType -> Expr -> M (Array Obligation)
   peel sub ctx argSpecs expr = case Array.uncons argSpecs of
     Nothing -> do
@@ -149,7 +194,11 @@ checkBody :: St -> String -> Ctx -> RType -> Expr -> M (Array Obligation)
 checkBody st fnName ctx res = case _ of
   ECase _ scruts alts -> do
     r <- scoped (traverse (embed st fnName ctx) scruts)
-    let ctx0 = extend ctx r.vars r.facts
+    let
+      ctx0' = extend ctx r.vars r.facts
+      -- scrutinizing a measured data value: some declared constructor holds
+      exhaustive = Array.mapMaybe (exhaustFact st ctx0'.env) r.value
+      ctx0 = ctx0' { assumps = ctx0'.assumps <> exhaustive }
     obls <- checkAlts st fnName ctx0 res r.value alts
     pure (r.obls <> obls)
   ELet _ binds body -> do
@@ -162,26 +211,41 @@ checkBody st fnName ctx res = case _ of
     let
       ctx' = extend ctx r.vars r.facts
       goal = subst res.binder r.value res.pred
-    pure (r.obls <> [ mkObligation fnName (spanOf e) ctx' goal ])
+    pure (r.obls <> [ mkObligation st fnName (spanOf e) ctx' goal ])
 
-mkObligation :: String -> Span -> Ctx -> Term -> Obligation
-mkObligation fnName span ctx goal =
+exhaustFact :: St -> Env -> Term -> Maybe Term
+exhaustFact st env t = case sortOf st.funSorts env t of
+  Just (SData d) -> do
+    dataDef <- Map.lookup d st.spec.datas
+    { head, tail } <- Array.uncons (map (\c -> TApp (discName c.name) [ t ]) dataDef.ctors)
+    pure (Array.foldl (TBin Or) head tail)
+  _ -> Nothing
+
+-- | Instantiate measure result refinements for every measure application
+-- | occurring in the obligation (assumptions and goal alike).
+mkObligation :: St -> String -> Span -> Ctx -> Term -> Obligation
+mkObligation st fnName span ctx goal =
   { fnName
   , span
   , decls: Map.toUnfoldable ctx.env
-  , assumps: ctx.assumps
+  , assumps: ctx.assumps <> instanceFacts
   , goal
   }
+  where
+  instanceFacts = Array.nubEq do
+    a <- Array.concatMap apps (Array.snoc ctx.assumps goal)
+    case Map.lookup a.fn st.spec.measures of
+      Just m | m.result.pred /= tTrue ->
+        [ subst m.result.binder (TApp a.fn a.args) m.result.pred ]
+      _ -> []
 
 bindLet :: St -> String -> Ctx -> Bind -> M Ctx
 bindLet st fnName ctx = case _ of
   NonRec x e -> do
     t <- embed st fnName ctx e
-    -- sort inference must see fresh call-result vars, so consult the
-    -- in-flight scope vars as well as the context env
     scope <- get
     let envNow = Map.union ctx.env (Map.fromFoldable scope.vars)
-    sort <- case sortOf envNow t of
+    sort <- case sortOf st.funSorts envNow t of
       Just s -> pure s
       Nothing -> throw ("cannot infer sort of let-bound " <> x)
     pure
@@ -192,26 +256,79 @@ bindLet st fnName ctx = case _ of
 
 -- | One alternative's binder row against the scrutinee terms.
 type BinderRow =
-  { conds :: Array Term -- literal equations this row must satisfy
+  { conds :: Array Term -- refutable conditions (negated for later alts)
+  , facts :: Array Term -- assumed but never negated (measure equations)
   , binds :: Array { name :: String, term :: Term } -- var binders
+  , newVars :: Array (Tuple String Sort) -- constructor field binders
   }
 
-binderRow :: Ctx -> Array Term -> Array Binder -> Either String BinderRow
-binderRow ctx scruts binders =
+emptyRow :: BinderRow
+emptyRow = { conds: [], facts: [], binds: [], newVars: [] }
+
+binderRow :: St -> Ctx -> Array Term -> Array Binder -> M BinderRow
+binderRow st ctx scruts binders =
   if Array.length binders /= Array.length scruts then
-    Left "binder/scrutinee arity mismatch"
+    throw "binder/scrutinee arity mismatch"
   else
-    Array.foldM step { conds: [], binds: [] } (Array.zip binders scruts)
+    foldM step emptyRow (Array.zip binders scruts)
   where
   step acc (Tuple b scrutT) = case b of
-    BLit (LInt k) -> Right acc { conds = Array.snoc acc.conds (TBin Eq scrutT (TInt k)) }
-    BLit (LBool v) -> Right acc { conds = Array.snoc acc.conds (TBin Eq scrutT (TBool v)) }
-    BLit (LOther tag) -> Left ("unsupported literal binder: " <> tag)
-    BVar x -> case sortOf ctx.env scrutT of
-      Just _ -> Right acc { binds = Array.snoc acc.binds { name: x, term: scrutT } }
-      Nothing -> Left "cannot infer scrutinee sort for var binder"
-    BNull -> Right acc
-    BOther tag -> Left ("unsupported binder: " <> tag)
+    BLit (LInt k) -> pure acc { conds = Array.snoc acc.conds (TBin Eq scrutT (TInt k)) }
+    BLit (LBool v) -> pure acc { conds = Array.snoc acc.conds (TBin Eq scrutT (TBool v)) }
+    BLit (LOther tag) -> throw ("unsupported literal binder: " <> tag)
+    BVar x -> case sortOf st.funSorts ctx.env scrutT of
+      Just _ -> pure acc { binds = Array.snoc acc.binds { name: x, term: scrutT } }
+      Nothing -> throw "cannot infer scrutinee sort for var binder"
+    BNull -> pure acc
+    BCtor ctorName subs -> do
+      info <- case Map.lookup ctorName st.ctors of
+        Just i -> pure i
+        Nothing -> throw
+          ( "constructor " <> ctorName
+              <> " is not declared in the spec file (add a data declaration)"
+          )
+      when (Array.length subs /= Array.length info.fields)
+        (throw ("constructor " <> ctorName <> " arity mismatch"))
+      -- each field gets a variable: the binder's own name, or fresh
+      fieldVars <- for (Array.zip subs info.fields) \(Tuple sub base) ->
+        case sub of
+          BVar x -> pure (Tuple x (baseSort base))
+          BNull -> do
+            n <- freshName "f"
+            pure (Tuple n (baseSort base))
+          _ -> throw ("nested pattern in " <> ctorName <> " is unsupported (bind a variable and match again)")
+      let
+        fieldTerms = map (\(Tuple n _) -> TVar n) fieldVars
+        measureFacts = ctorFacts st info.dataName ctorName scrutT fieldTerms
+      pure acc
+        { conds = Array.snoc acc.conds (TApp (discName ctorName) [ scrutT ])
+        , facts = acc.facts <> measureFacts
+        , newVars = acc.newVars <> fieldVars
+        }
+    BOther tag -> throw ("unsupported binder: " <> tag)
+
+-- | The facts a constructor contributes about a value: its discriminator,
+-- | its siblings' negated discriminators, and each measure's equation.
+ctorFacts :: St -> String -> String -> Term -> Array Term -> Array Term
+ctorFacts st dataName ctorName value fieldTerms =
+  siblingFacts <> measureFacts
+  where
+  info = Map.lookup ctorName st.ctors
+  siblingFacts = case info of
+    Just i -> map (\s -> TNot (TApp (discName s) [ value ])) i.siblings
+    Nothing -> []
+  measureFacts = do
+    m <- fromMaybe [] (Map.lookup dataName st.measuresByData)
+    case Map.lookup ctorName m.eqns of
+      Just eqn ->
+        let
+          rhs = Array.foldl
+            (\acc (Tuple p t) -> subst p t acc)
+            eqn.rhs
+            (Array.zip eqn.params fieldTerms)
+        in
+          [ TBin Eq (TApp m.name [ value ]) rhs ]
+      Nothing -> []
 
 conjOf :: Array Term -> Term
 conjOf ts = case Array.uncons ts of
@@ -224,14 +341,17 @@ checkAlts st fnName ctx res scruts alts = do
   pure result.obls
   where
   step acc alt = do
-    row <- lift (binderRow ctx scruts alt.binders)
+    row <- binderRow st ctx scruts alt.binders
     let
       bindEnv = Map.fromFoldable
-        (Array.mapMaybe (\b -> map (Tuple b.name) (sortOf ctx.env b.term)) row.binds)
+        ( Array.mapMaybe
+            (\b -> map (Tuple b.name) (sortOf st.funSorts ctx.env b.term))
+            row.binds
+        )
       bindEqs = map (\b -> TBin Eq (TVar b.name) b.term) row.binds
       ctxAlt =
-        { env: Map.union ctx.env bindEnv
-        , assumps: ctx.assumps <> acc.negs <> row.conds <> bindEqs
+        { env: Map.union ctx.env (Map.union bindEnv (Map.fromFoldable row.newVars))
+        , assumps: ctx.assumps <> acc.negs <> row.conds <> row.facts <> bindEqs
         }
     obls <- checkResult ctxAlt alt.result
     let
@@ -284,7 +404,9 @@ embed st fnName ctx = go
       if Map.member q.ident ctx.env then pure (TVar q.ident)
       else cannot sp ("unbound variable " <> q.ident)
     Just "Data.Boolean" | q.ident == "otherwise" -> pure (TBool true)
-    Just m -> cannot sp ("reference to " <> m <> "." <> q.ident)
+    Just _ -> case Map.lookup q.ident st.ctors of
+      Just info | Array.null info.fields -> mkCtorTerm q.ident info []
+      _ -> cannot sp ("reference to " <> qualShow q)
 
   embedApp e = do
     let spine = flatten e []
@@ -294,10 +416,31 @@ embed st fnName ctx = go
         Nothing -> case Array.uncons spine.args of
           Just { head: EVar _ dict, tail }
             | Just prim <- resolveGlobal q dict -> applyPrim sp prim tail
-          _ -> case callSpec q of
-            Just spec -> emitCall (spanOf e) q spec spine.args
-            Nothing -> cannot sp ("call to " <> qualShow q)
+          _ -> case Map.lookup q.ident st.ctors of
+            Just info -> do
+              when (Array.length spine.args /= Array.length info.fields)
+                (cannot sp ("partial application of constructor " <> q.ident))
+              ts <- traverse go spine.args
+              mkCtorTerm q.ident info ts
+            Nothing -> case callSpec q of
+              Just spec -> emitCall (spanOf e) q spec spine.args
+              Nothing -> cannot sp ("call to " <> qualShow q)
       other -> cannot (spanOf other) "higher-order application"
+
+  -- a constructor application: a fresh value plus everything the
+  -- constructor implies about it
+  mkCtorTerm ctorName info argTerms = do
+    n <- freshName ctorName
+    let
+      value = TVar n
+      facts =
+        [ TApp (discName ctorName) [ value ] ]
+          <> ctorFacts st info.dataName ctorName value argTerms
+    modify_ \s -> s
+      { vars = Array.snoc s.vars (Tuple n (SData info.dataName))
+      , facts = s.facts <> facts
+      }
+    pure value
 
   localPrim q = case q.modName of
     Just m | m == st.modName -> Map.lookup q.ident st.table
@@ -311,10 +454,6 @@ embed st fnName ctx = go
       PrimNot, [ t ] -> pure (TNot t)
       _, _ -> cannot sp "partially applied primitive"
 
-  -- A spec for this callee: a checked spec for a module-local function
-  -- (including the function under verification itself — recursion), or an
-  -- `assume` spec matched by unqualified name, through the float map for
-  -- floated class methods like `min`.
   callSpec :: Qualified -> Maybe FnSpec
   callSpec q = case q.modName of
     Just m | m == st.modName ->
@@ -341,17 +480,13 @@ embed st fnName ctx = go
         (\acc (Tuple a t) -> if a.binder == "_" then acc else subst a.binder t acc)
         p
         pairs
-    -- preconditions: each nontrivial argument refinement becomes an
-    -- obligation at the call site, under the context as it stands here
     scope <- get
     let ctxHere = extend ctx scope.vars scope.facts
     for_ pairs \(Tuple a t) -> do
       let goalRaw = instantiate a.pred
-      -- the arg's own binder denotes the arg value
       let goal = if a.binder == "_" then goalRaw else subst a.binder t goalRaw
       when (goal /= tTrue)
-        (modify_ \s -> s { obls = Array.snoc s.obls (mkObligation fnName sp ctxHere goal) })
-    -- result: a fresh variable carrying the instantiated result refinement
+        (modify_ \s -> s { obls = Array.snoc s.obls (mkObligation st fnName sp ctxHere goal) })
     n <- freshName q.ident
     let
       resSort = baseSort spec.result.base
@@ -362,19 +497,9 @@ embed st fnName ctx = go
       }
     pure (TVar n)
 
-  freshName base = do
-    s <- get
-    put s { fresh = s.fresh + 1 }
-    pure ("$" <> base <> show s.fresh)
-
   flatten expr args = case expr of
     EApp _ f a -> flatten f (Array.cons a args)
     head -> { head, args }
-
-qualShow :: Qualified -> String
-qualShow q = case q.modName of
-  Just m -> m <> "." <> q.ident
-  Nothing -> q.ident
 
 exprTag :: Expr -> String
 exprTag = case _ of
@@ -385,3 +510,8 @@ exprTag = case _ of
   ECase _ _ _ -> "case"
   ELet _ _ _ -> "let"
   EOther _ tag -> tag
+
+qualShow :: Qualified -> String
+qualShow q = case q.modName of
+  Just m -> m <> "." <> q.ident
+  Nothing -> q.ident

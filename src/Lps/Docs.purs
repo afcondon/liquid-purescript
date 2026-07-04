@@ -15,8 +15,9 @@ import Data.Array as Array
 import Data.Either (Either(..), hush, note)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (joinWith)
+import Data.String as String
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object)
@@ -82,7 +83,12 @@ flatten ty = case fnParts ty of
   baseOf t = case constructorName t of
     Just "Prim.Int" -> Just BInt
     Just "Prim.Boolean" -> Just BBool
+    -- any other non-parametric constructor: compare by unqualified name
+    -- against a spec-declared data type
+    Just qualified -> Just (BData (lastSegment qualified))
     _ -> Nothing
+
+  lastSegment s = fromMaybe s (Array.last (String.split (String.Pattern ".") s))
 
   constructorName t = do
     o <- hush (asObject t)

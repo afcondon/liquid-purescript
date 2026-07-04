@@ -43,18 +43,21 @@ prettyModel raw =
   flat = replaceAll (Pattern "\n") (Replacement " ") raw
   chunks = Array.drop 1 (split (Pattern "(define-fun ") flat)
 
-  -- chunk looks like: "n () Int 0) )" or "m () Int (- 1)) )"
+  -- chunk looks like: "n () Int 0) )" or "m () Int (- 1)) )". Chunks whose
+  -- second token is not "()" are z3 function interpretations (e.g. measure
+  -- models over uninterpreted sorts) — skipped; the constants tell the story.
   defn chunk =
     let
       ws = Array.filter (_ /= "") (split (Pattern " ") chunk)
     in
       case Array.uncons ws of
-        Just { head: name, tail } ->
-          let
-            value = takeBalanced (String.joinWith " " (Array.drop 2 tail))
-          in
-            if value == "" then Nothing else Just (name <> " = " <> value)
-        Nothing -> Nothing
+        Just { head: name, tail }
+          | Array.index tail 0 == Just "()" ->
+              let
+                value = takeBalanced (String.joinWith " " (Array.drop 2 tail))
+              in
+                if value == "" then Nothing else Just (name <> " = " <> value)
+        _ -> Nothing
 
   -- Take characters until the paren depth of the enclosing define-fun closes.
   takeBalanced s = trim (fromCharArray (go 0 (toCharArray s)))

@@ -1,0 +1,22 @@
+-- Phase 2: user data types characterized by measures
+
+data IntList = INil | ICons Int IntList
+
+measure len :: IntList -> { v : Int | v >= 0 }
+  INil = 0
+  ICons x xs = 1 + len xs
+
+type Nat = { v : Int | v >= 0 }
+
+-- the PureScript function computes the logic-level measure
+count :: { l : IntList } -> { v : Int | v == len l }
+
+-- lengths add across append
+append :: { a : IntList } -> { b : IntList } -> { v : IntList | len v == len a + len b }
+
+-- expected UNSAFE: forgets the +1
+badCount :: { l : IntList } -> { v : Int | v == len l }
+
+singleton :: Int -> { v : IntList | len v == 1 }
+
+headOr :: IntList -> Int

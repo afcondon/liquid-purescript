@@ -54,6 +54,26 @@ P1.callBad  ✗ UNSAFE
     counterexample: n = (- 1)
 ```
 
+**Phase 2 first cut** (same day): user data types with **measures** —
+declare the shape and a logic-level measure in the spec file, and the
+verifier reasons inductively about constructors:
+
+```
+-- P2.lps
+data IntList = INil | ICons Int IntList
+
+measure len :: IntList -> { v : Int | v >= 0 }
+  INil = 0
+  ICons x xs = 1 + len xs
+
+count  :: { l : IntList } -> { v : Int | v == len l }
+append :: { a : IntList } -> { b : IntList } -> { v : IntList | len v == len a + len b }
+```
+
+Both prove (`count` by assuming its own spec at the recursive call;
+`append` through constructor-application facts), and the version of
+`count` that forgets the `+ 1` refutes with a countermodel.
+
 ## Requirements
 
 purs 0.15.x, spago@next, node, and a `z3` binary on the PATH.
