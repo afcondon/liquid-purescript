@@ -1,0 +1,9 @@
+Demo.abs  ✓ SAFE
+Demo.bad  ✗ UNSAFE
+    at src/Demo.purs:9:9
+    cannot prove: ((n - 1) >= 0)
+    counterexample: n = 0
+Demo.clamp  ✓ SAFE
+Demo.double  ✓ SAFE
+Demo.low  ? UNSUPPORTED — cannot embed call to Demo.min (outside the slice fragment)
+Demo.sign  ✓ SAFE

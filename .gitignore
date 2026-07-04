@@ -1,0 +1,5 @@
+output/
+.spago/
+node_modules/
+*.smt2
+examples/output/

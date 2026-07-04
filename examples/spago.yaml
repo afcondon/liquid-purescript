@@ -1,0 +1,10 @@
+package:
+  name: lps-examples
+  dependencies:
+    - prelude
+workspace:
+  packageSet:
+    registry: 77.10.1
+  extraPackages: {}
+  backend:
+    cmd: "true"

@@ -1,0 +1,28 @@
+package:
+  name: lps
+  run:
+    main: Lps.Main
+  dependencies:
+    - prelude
+    - effect
+    - console
+    - arrays
+    - strings
+    - either
+    - maybe
+    - tuples
+    - ordered-collections
+    - foldable-traversable
+    - integers
+    - lists
+    - control
+    - parsing
+    - argonaut-core
+    - foreign-object
+    - node-buffer
+    - node-fs
+    - node-process
+workspace:
+  packageSet:
+    registry: 77.10.1
+  extraPackages: {}

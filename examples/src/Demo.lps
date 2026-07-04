@@ -1,0 +1,14 @@
+-- Refinement specs for Demo
+type Nat = { v : Int | v >= 0 }
+
+abs :: Int -> Nat
+
+bad :: Int -> Nat
+
+clamp :: { lo : Int } -> { hi : Int | hi >= lo } -> Int -> { v : Int | v >= lo && v <= hi }
+
+sign :: Int -> { s : Int | 0 - 1 <= s && s <= 1 }
+
+double :: { n : Int | n >= 0 } -> { v : Int | v >= n }
+
+low :: Int -> { v : Int | v <= 0 }
