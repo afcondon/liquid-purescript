@@ -106,11 +106,15 @@ flatten ty = case fnParts ty of
   guardJust b = if b then Just unit else Nothing
 
 -- | Nothing = spec agrees with (or cannot be checked against) the type.
+-- | A type outside the flattenable fragment — polymorphic, constrained,
+-- | parameterized — is passed through silently: a spec may legitimately
+-- | pin a monomorphic instance of a polymorphic function (trivial
+-- | lifting), and the checker itself fails honestly on anything it cannot
+-- | embed, so no silent blessing is possible here.
 crossCheck :: SigMap -> String -> FnSpec -> Maybe String
 crossCheck sigs name spec = case Map.lookup name sigs of
   Nothing -> Nothing -- not in docs.json (or not a value decl); nothing to say
-  Just Nothing ->
-    Just "declared type is outside the first-order Int/Boolean fragment"
+  Just Nothing -> Nothing -- type not flattenable; the checker is the backstop
   Just (Just bases) ->
     let
       specBases = map _.base spec.args <> [ spec.result.base ]

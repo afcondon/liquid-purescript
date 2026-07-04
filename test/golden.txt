@@ -1,3 +1,12 @@
+Arrays.badMid  ✗ UNSAFE
+    at src/Arrays.purs:18:13
+    cannot prove: ((($length0 / 2) >= 0) && (($length0 / 2) < (length xs)))
+    counterexample: xs = PSArray!val!0, $length0 = 0
+Arrays.firstHalf  ✓ SAFE
+Arrays.grow  ✓ SAFE
+Arrays.mid  ✓ SAFE
+Arrays.rest  ✓ SAFE
+Arrays.three  ✓ SAFE
 Demo.once  ? UNSUPPORTED — spec/type mismatch: spec has 2 argument(s) but the declared type has 1
 Demo.abs  ✓ SAFE
 Demo.bad  ✗ UNSAFE

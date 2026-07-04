@@ -1,0 +1,17 @@
+-- Trusted specs for Data.Array functions, phrased with the built-in
+-- `length` measure (element types are erased — only length is visible).
+--
+-- Element-typed arguments are declared Int for now: the argument
+-- refinement is trivially true, so nothing is asserted about elements
+-- and the specs stay sound for arrays of any element type.
+
+assume length :: { xs : Array } -> { v : Int | v == length xs }
+
+assume cons :: Int -> { xs : Array } -> { v : Array | length v == length xs + 1 }
+
+assume snoc :: { xs : Array } -> Int -> { v : Array | length v == length xs + 1 }
+
+-- take/drop clamp out-of-range counts; exact case split on the count
+assume take :: { n : Int } -> { xs : Array } -> { v : Array | (n <= 0 && length v == 0) || (n > 0 && n <= length xs && length v == n) || (n > length xs && length v == length xs) }
+
+assume drop :: { n : Int } -> { xs : Array } -> { v : Array | (n <= 0 && length v == length xs) || (n > 0 && n <= length xs && length v == length xs - n) || (n > length xs && length v == 0) }

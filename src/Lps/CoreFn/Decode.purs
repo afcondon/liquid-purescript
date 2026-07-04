@@ -68,6 +68,7 @@ decodeLiteral j = do
   case litType of
     "IntLiteral" -> LInt <$> (field o "value" >>= asInt)
     "BooleanLiteral" -> LBool <$> (field o "value" >>= asBool)
+    "ArrayLiteral" -> LArray <$> (field o "value" >>= asArray >>= traverse decodeExpr)
     other -> pure (LOther other)
 
 decodeBinder :: Json -> Dec Binder

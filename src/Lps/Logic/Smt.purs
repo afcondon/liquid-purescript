@@ -19,11 +19,18 @@ type Query =
   , goal :: Term
   }
 
+-- | `Array` is reserved in SMT-LIB (the theory of arrays), so the
+-- | PureScript Array sort gets a prefixed name at the solver boundary.
+sortName :: String -> String
+sortName = case _ of
+  "Array" -> "PSArray"
+  name -> name
+
 smtSort :: Sort -> String
 smtSort = case _ of
   SInt -> "Int"
   SBool -> "Bool"
-  SData name -> name
+  SData name -> sortName name
 
 smtOp :: Op -> String
 smtOp = case _ of
@@ -58,7 +65,7 @@ smtTerm = case _ of
 -- | get-model with an error s-expression, which the driver ignores.
 render :: Query -> String
 render q = Array.intercalate "\n" $
-  map (\s -> "(declare-sort " <> s <> " 0)") q.sorts
+  map (\s -> "(declare-sort " <> sortName s <> " 0)") q.sorts
     <> map funLine q.funs
     <> map declLine q.decls
     <> map (\t -> "(assert " <> smtTerm t <> ")") q.assumps

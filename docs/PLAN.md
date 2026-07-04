@@ -295,10 +295,22 @@ with the same facts; measure result refinements are instantiated at every
 application site (keeping the logic quantifier-free); case on a measured
 sort assumes constructor exhaustiveness. `examples/src/P2.{purs,lps}`
 proves `count l == len l` and `len (append a b) == len a + len b`
-inductively, refutes `badCount`. Remaining in Phase 2: `Array`
-via a built-in `length` measure over literal/`assume`d arrays, parametric
-polymorphism (trivial lifting), selector-style access to constructor
-fields (needed for literal sub-patterns), records.
+inductively, refutes `badCount`.
+
+*Status 2026-07-04, later*: Arrays landed — `Array` is a built-in
+element-erased data sort (renamed `PSArray` at the SMT boundary; `Array`
+is reserved by the theory of arrays) with a built-in `length` measure;
+array literals contribute exact lengths; `lib/arrays.lps` gives trusted
+specs for `length`/`cons`/`snoc`/`take`/`drop` including the exact
+clamping case-splits. `examples/src/Arrays.{purs,lps}` proves literal
+lengths, growth through `cons`, valid indexing (`mid` via Euclidean
+division under a non-empty precondition), and refutes `badMid` with the
+empty array. Trivial polymorphism lifting: the docs.json cross-check now
+passes silently on non-flattenable (polymorphic/parameterized) types —
+a spec may pin a monomorphic instance, and the checker fails honestly on
+anything it cannot embed. Remaining in Phase 2: selector-style access to
+constructor fields (literal sub-patterns), flat records, polymorphic
+data types (element sorts).
 
 **Phase 3 — higher-order (8–12 wk).** Abstract refinements, refinement
 inference for lambdas, `map`/`filter`/`fold` specs.

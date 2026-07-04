@@ -1,6 +1,7 @@
 package:
   name: lps-examples
   dependencies:
+    - arrays
     - prelude
 workspace:
   packageSet:

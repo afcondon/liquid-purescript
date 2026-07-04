@@ -1,0 +1,16 @@
+-- Phase 2: arrays via the built-in length measure
+-- (verify with --include lib/arrays.lps)
+
+three :: { v : Array | length v == 3 }
+
+grow :: { xs : Array } -> { v : Array | length v == length xs + 1 }
+
+-- a valid index into a non-empty array
+mid :: { xs : Array | length xs > 0 } -> { v : Int | v >= 0 && v < length xs }
+
+-- expected UNSAFE: without the non-empty precondition, [] refutes it
+badMid :: { xs : Array } -> { v : Int | v >= 0 && v < length xs }
+
+firstHalf :: { xs : Array } -> { v : Array | length v <= length xs }
+
+rest :: { xs : Array | length xs > 0 } -> { v : Array | length v == length xs - 1 }

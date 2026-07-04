@@ -12,6 +12,7 @@ type Qualified = { modName :: Maybe String, ident :: String }
 data Literal
   = LInt Int
   | LBool Boolean
+  | LArray (Array Expr)
   | LOther String
 
 data Binder

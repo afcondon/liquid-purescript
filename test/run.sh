@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 (cd examples && spago build) >/dev/null 2>&1 || { echo "examples build failed"; exit 1; }
 spago build >/dev/null 2>&1 || { echo "lps build failed"; exit 1; }
 
-actual=$(spago run --quiet -- verify-all --output examples/output --include lib/prelude.lps 2>/dev/null)
+actual=$(spago run --quiet -- verify-all --output examples/output --include lib/prelude.lps --include lib/arrays.lps 2>/dev/null)
 status=$?
 
 if [ "$status" -ne 1 ]; then

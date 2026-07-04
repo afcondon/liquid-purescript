@@ -236,10 +236,25 @@ type Acc =
   , measures :: Map String { name :: String, dataName :: String, result :: RType, eqns :: Map String { params :: Array String, rhs :: Term } }
   }
 
+-- | `Array` is a built-in data sort with a built-in `length` measure and
+-- | no spec-level constructors (arrays are built by literals and library
+-- | functions, not pattern-matched constructors). Element types are
+-- | erased: only length is visible to the logic.
+builtinDatas :: Map String { name :: String, ctors :: Array { name :: String, fields :: Array Base } }
+builtinDatas = Map.singleton "Array" { name: "Array", ctors: [] }
+
+builtinMeasures :: Map String { name :: String, dataName :: String, result :: RType, eqns :: Map String { params :: Array String, rhs :: Term } }
+builtinMeasures = Map.singleton "length"
+  { name: "length"
+  , dataName: "Array"
+  , result: { binder: "v", base: BInt, pred: TBin Ge (TVar "v") (TInt 0) }
+  , eqns: Map.empty
+  }
+
 resolve :: Array Decl -> Either String SpecFile
 resolve decls = do
   result <- foldM step
-    { aliases: Map.empty, fns: Map.empty, assumes: Map.empty, datas: Map.empty, measures: Map.empty }
+    { aliases: Map.empty, fns: Map.empty, assumes: Map.empty, datas: builtinDatas, measures: builtinMeasures }
     decls
   pure
     { fns: result.fns
@@ -260,6 +275,7 @@ resolve decls = do
   baseName = case _ of
     "Int" -> Just BInt
     "Boolean" -> Just BBool
+    "Array" -> Just (BData "Array")
     name | Set.member name dataNames -> Just (BData name)
     _ -> Nothing
 
@@ -276,6 +292,8 @@ resolve decls = do
       fnSpec <- mkFnSpec acc name raws
       pure acc { assumes = Map.insert name fnSpec acc.assumes }
     DData name ctors -> do
+      when (name == "Array" || name == "Int" || name == "Boolean")
+        (Left (name <> " is a built-in type and cannot be redeclared"))
       resolved <- traverse
         ( \c -> do
             fields <- traverse

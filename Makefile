@@ -7,7 +7,7 @@ examples:
 	cd examples && spago build
 
 verify: build examples
-	spago run --quiet -- verify-all --output examples/output --include lib/prelude.lps
+	spago run --quiet -- verify-all --output examples/output --include lib/prelude.lps --include lib/arrays.lps
 
 bundle:
 	spago bundle

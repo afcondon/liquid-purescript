@@ -74,6 +74,17 @@ Both prove (`count` by assuming its own spec at the recursive call;
 `append` through constructor-application facts), and the version of
 `count` that forgets the `+ 1` refutes with a countermodel.
 
+**Arrays** work through a built-in `length` measure (element types are
+erased — only length is visible to the logic) plus trusted specs for
+`Data.Array` functions in `lib/arrays.lps`:
+
+```
+mid :: { xs : Array | length xs > 0 } -> { v : Int | v >= 0 && v < length xs }
+```
+
+proves (`mid xs = length xs / 2`), and the same body without the
+non-empty precondition refutes with the empty array.
+
 ## Requirements
 
 purs 0.15.x, spago@next, node, and a `z3` binary on the PATH.

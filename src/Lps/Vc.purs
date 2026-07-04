@@ -275,6 +275,7 @@ binderRow st ctx scruts binders =
   step acc (Tuple b scrutT) = case b of
     BLit (LInt k) -> pure acc { conds = Array.snoc acc.conds (TBin Eq scrutT (TInt k)) }
     BLit (LBool v) -> pure acc { conds = Array.snoc acc.conds (TBin Eq scrutT (TBool v)) }
+    BLit (LArray _) -> throw "array patterns are unsupported (match on length instead)"
     BLit (LOther tag) -> throw ("unsupported literal binder: " <> tag)
     BVar x -> case sortOf st.funSorts ctx.env scrutT of
       Just _ -> pure acc { binds = Array.snoc acc.binds { name: x, term: scrutT } }
@@ -388,6 +389,17 @@ embed st fnName ctx = go
   go = case _ of
     ELit _ (LInt n) -> pure (TInt n)
     ELit _ (LBool b) -> pure (TBool b)
+    ELit _ (LArray elems) -> do
+      -- element values are erased (only length is visible to the logic),
+      -- but embedding each element still fires any call obligations inside
+      _ <- traverse go elems
+      n <- freshName "arr"
+      modify_ \s -> s
+        { vars = Array.snoc s.vars (Tuple n (SData "Array"))
+        , facts = Array.snoc s.facts
+            (TBin Eq (TApp "length" [ TVar n ]) (TInt (Array.length elems)))
+        }
+      pure (TVar n)
     ELit sp (LOther tag) -> cannot sp ("literal " <> tag)
     EVar sp q -> embedVar sp q
     e@(EApp _ _ _) -> embedApp e
