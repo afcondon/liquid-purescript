@@ -264,6 +264,17 @@ functions with binder instantiation; `assume` declarations for FFI/imports;
 signature cross-check against `docs.json`; `lps` as a spago backend cmd;
 error messages worth reading (span + obligation pretty-printed + model).
 
+*Status 2026-07-04*: the core landed same-day as the slice — spec'd calls
+with precondition obligations at the call site and fresh result variables
+carrying instantiated postconditions; recursion by assuming the function's
+own spec; `assume` declarations matched through the float map; multi-
+scrutinee/Int-literal cases; `--smt2-dir` artifact dump. Call facts are
+scoped per path so a postcondition justified under one branch cannot leak
+into a sibling. See `examples/src/P1.{purs,lps}`. Remaining: signature
+cross-check against `docs.json`, `lps` as a spago backend cmd, recursive
+`let`, and a starter spec corpus for the Prelude functions the examples
+keep reaching for.
+
 **Phase 2 — measures and data (6–8 wk).** ADT scrutinees and constructor
 binders; measures (`length`, user-defined) as uninterpreted functions with
 constructor axioms; `Array` refinements (`NonEmpty`); parametric polymorphism
@@ -274,6 +285,33 @@ inference for lambdas, `map`/`filter`/`fold` specs.
 
 **Phase 4 — type classes (research).** Bounded refinements, per-instance
 specs. Genuinely open; also where row-polymorphic record refinements live.
+
+### Validating the research phases without a peer reviewer
+
+Decision (Andrew, 2026-07-04): the open-research work — row-polymorphic
+record refinements especially — is in scope for Claude to attempt, with the
+constraint that Andrew cannot referee the metatheory. The validation
+strategy is therefore **a human-checkable test corpus, not a proof**:
+
+1. Before any research implementation, write a corpus of (code, spec,
+   expected verdict) triples that a careful reader can validate by
+   inspection — each case small enough that "this should obviously be
+   SAFE/UNSAFE" is a human judgment, no theory needed. UNSAFE cases in
+   equal number to SAFE: a broken system that blesses everything must fail
+   the corpus loudly.
+2. Include *soundness traps*: cases engineered so that the known-tempting
+   unsound shortcuts (refinement leaking across row extension, width
+   subtyping forgetting a refined field, alias capture in record update)
+   would each flip a specific expected-UNSAFE to SAFE. Name the trap in a
+   comment on each case.
+3. The implementation is accepted when the corpus passes and every trap
+   still refutes — and rejected wholesale when any trap blesses. The
+   corpus is the contract; it outlives any particular implementation
+   attempt.
+
+This is differential-conformance thinking (the Jurist method) applied to
+verification: substitute an executable, inspectable artifact for the
+expert review we don't have.
 
 **Cross-cutting, when it earns its keep**: playground integration (z3 WASM,
 per-binding property display), Minard overlay (which functions are verified —

@@ -1,0 +1,28 @@
+-- Phase 1: calls to spec'd functions, recursion, assume, literal cases
+
+type Nat = { v : Int | v >= 0 }
+
+myAbs :: Int -> Nat
+
+-- call to a spec'd function: myAbs's result refinement is assumed at the site
+dist :: Int -> Int -> Nat
+
+-- recursion: the recursive call assumes sumTo's own spec
+sumTo :: Int -> Nat
+
+-- precondition on the argument...
+inc :: { n : Int | n >= 0 } -> { v : Int | v >= 1 }
+
+-- ...discharged by myAbs's postcondition here
+callGood :: Int -> Nat
+
+-- ...but not provable here: expected UNSAFE at the call site
+callBad :: Int -> Nat
+
+-- trusted spec for an imported class method (floated as P1.min)
+assume min :: { a : Int } -> { b : Int } -> { v : Int | (v <= a && v <= b) && (v == a || v == b) }
+
+low2 :: Int -> { v : Int | v <= 0 }
+
+-- multi-alternative case on Int literals
+size :: Int -> { v : Int | v >= 0 && v <= 2 }

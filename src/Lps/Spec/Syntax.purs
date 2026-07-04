@@ -27,4 +27,6 @@ trivial b = { binder: "_", base: b, pred: tTrue }
 -- | Earlier argument binders scope over later preds and the result pred.
 type FnSpec = { args :: Array RType, result :: RType }
 
-type SpecFile = { fns :: Map String FnSpec }
+-- | `fns` are checked; `assumes` are trusted specs for imported/FFI
+-- | functions (the LH `assume` move), keyed by unqualified identifier.
+type SpecFile = { fns :: Map String FnSpec, assumes :: Map String FnSpec }

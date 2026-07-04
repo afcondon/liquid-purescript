@@ -34,6 +34,7 @@ data RTypeRaw
 data Decl
   = DAlias String RTypeRaw
   | DFn String (Array RTypeRaw)
+  | DAssume String (Array RTypeRaw)
 
 type P a = Parser String a
 
@@ -118,13 +119,20 @@ rtypeRaw = refined <|> named
     pure (RConcrete { binder, base: b, pred })
 
 decl :: P Decl
-decl = alias <|> fnSpec
+decl = alias <|> assumeSpec <|> fnSpec
   where
   alias = do
     _ <- keyword "type"
     name <- conId
     _ <- symbol "="
     DAlias name <$> rtypeRaw
+
+  assumeSpec = do
+    _ <- keyword "assume"
+    name <- varId
+    _ <- symbol "::"
+    tys <- sepBy1 rtypeRaw (symbol "->")
+    pure (DAssume name (Array.fromFoldable tys))
 
   fnSpec = do
     name <- varId
@@ -160,27 +168,36 @@ checkLinear = case _ of
   TNeg t -> checkLinear t
   TNot t -> checkLinear t
 
+type Acc =
+  { aliases :: Map String RType
+  , fns :: Map String { args :: Array RType, result :: RType }
+  , assumes :: Map String { args :: Array RType, result :: RType }
+  }
+
 resolve :: Array Decl -> Either String SpecFile
 resolve decls = do
-  result <- foldM step { aliases: Map.empty, fns: Map.empty } decls
-  pure { fns: result.fns }
+  result <- foldM step { aliases: Map.empty, fns: Map.empty, assumes: Map.empty } decls
+  pure { fns: result.fns, assumes: result.assumes }
   where
-  step
-    :: { aliases :: Map String RType, fns :: Map String { args :: Array RType, result :: RType } }
-    -> Decl
-    -> Either String { aliases :: Map String RType, fns :: Map String { args :: Array RType, result :: RType } }
+  step :: Acc -> Decl -> Either String Acc
   step acc = case _ of
     DAlias name raw -> do
       rt <- resolveRaw acc.aliases raw
       checkLinear rt.pred
       pure acc { aliases = Map.insert name rt acc.aliases }
     DFn name raws -> do
-      tys <- traverse (resolveRaw acc.aliases) raws
-      traverse_ (\rt -> checkLinear rt.pred) tys
-      case Array.unsnoc tys of
-        Nothing -> Left ("empty spec for " <> name)
-        Just { init, last } ->
-          pure acc { fns = Map.insert name { args: init, result: last } acc.fns }
+      fnSpec <- mkFnSpec acc name raws
+      pure acc { fns = Map.insert name fnSpec acc.fns }
+    DAssume name raws -> do
+      fnSpec <- mkFnSpec acc name raws
+      pure acc { assumes = Map.insert name fnSpec acc.assumes }
+
+  mkFnSpec acc name raws = do
+    tys <- traverse (resolveRaw acc.aliases) raws
+    traverse_ (\rt -> checkLinear rt.pred) tys
+    case Array.unsnoc tys of
+      Nothing -> Left ("empty spec for " <> name)
+      Just { init, last } -> pure { args: init, result: last }
 
   resolveRaw aliases = case _ of
     RConcrete rt -> Right rt

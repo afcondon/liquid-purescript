@@ -9,7 +9,9 @@
 module Lps.Resolve
   ( Prim(..)
   , PrimTable
+  , FloatMap
   , buildTable
+  , buildFloats
   , resolveGlobal
   ) where
 
@@ -75,4 +77,16 @@ buildTable mod = Map.fromFoldable (mapMaybe floated mod.decls)
   floated = case _ of
     NonRec name (EApp _ (EVar _ method) (EVar _ dict)) ->
       map (Tuple name) (resolveGlobal method dict)
+    _ -> Nothing
+
+-- | Every floated alias, primitive or not: local name -> underlying method.
+-- | Used to match `assume` specs against class methods like `min`
+-- | (floated as `Demo.min = Data.Ord.min ordInt`).
+type FloatMap = Map String Qualified
+
+buildFloats :: Module -> FloatMap
+buildFloats mod = Map.fromFoldable (mapMaybe floated mod.decls)
+  where
+  floated = case _ of
+    NonRec name (EApp _ (EVar _ method) (EVar _ _)) -> Just (Tuple name method)
     _ -> Nothing

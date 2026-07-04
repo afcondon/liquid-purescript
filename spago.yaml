@@ -17,6 +17,7 @@ package:
     - lists
     - control
     - parsing
+    - transformers
     - argonaut-core
     - foreign-object
     - node-buffer

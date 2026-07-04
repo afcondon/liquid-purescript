@@ -23,6 +23,7 @@
             "parsing",
             "prelude",
             "strings",
+            "transformers",
             "tuples"
           ]
         },

@@ -36,11 +36,23 @@ Demo.bad  ✗ UNSAFE
 
 ## Status
 
-**Vertical slice** (2026-07-04): first-order `Int`/`Boolean` functions,
-if/guards/case-on-Boolean path conditions, non-recursive `let`, dependent
-specs across argument binders (`clamp :: {lo:Int} -> {hi:Int|hi>=lo} -> ...`).
-Everything outside the fragment reports UNSUPPORTED, never a silent pass.
-See `docs/PLAN.md` for the architecture, semantics, and phased roadmap.
+**Phase 1 core** (2026-07-04): first-order `Int`/`Boolean` functions with
+if/guards/case (including multi-alternative Int-literal cases), `let`,
+dependent specs across argument binders
+(`clamp :: {lo:Int} -> {hi:Int|hi>=lo} -> ...`), **calls to spec'd
+functions** (preconditions checked at the call site, postconditions assumed
+— see `callBad` refute below), **recursion** (assumes the function's own
+spec), and **`assume` specs** for imported/FFI functions. `--smt2-dir`
+dumps every obligation as a replayable artifact. Everything outside the
+fragment reports UNSUPPORTED, never a silent pass. See `docs/PLAN.md` for
+architecture, semantics, and the phased roadmap.
+
+```
+P1.callBad  ✗ UNSAFE
+    at src/P1.purs:21:13
+    cannot prove: (n >= 0)
+    counterexample: n = (- 1)
+```
 
 ## Requirements
 

@@ -15,6 +15,7 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (Pattern(..), Replacement(..), lastIndexOf, replace, take)
 import Data.Traversable (for, for_)
+import Data.TraversableWithIndex (forWithIndex)
 import Effect (Effect)
 import Effect.Console (error, log)
 import Lps.CoreFn.Decode (decodeModule)
@@ -25,13 +26,19 @@ import Lps.Solver.Z3 (Verdict(..), solve)
 import Lps.Spec.Parser (parseSpecFile)
 import Lps.Vc (Obligation, checkModule)
 import Node.Encoding (Encoding(..))
-import Node.FS.Sync (readTextFile)
+import Node.FS.Perms (permsAll)
+import Node.FS.Sync (mkdir', readTextFile, writeTextFile)
 import Node.Process (argv, setExitCode)
 
-type Args = { output :: String, moduleName :: String, spec :: Maybe String }
+type Args =
+  { output :: String
+  , moduleName :: String
+  , spec :: Maybe String
+  , smt2Dir :: Maybe String
+  }
 
 parseArgs :: Array String -> Either String Args
-parseArgs = go { output: "output", moduleName: "", spec: Nothing }
+parseArgs = go { output: "output", moduleName: "", spec: Nothing, smt2Dir: Nothing }
   where
   go acc args = case Array.uncons args of
     Nothing ->
@@ -40,13 +47,14 @@ parseArgs = go { output: "output", moduleName: "", spec: Nothing }
       "verify" -> go acc tail
       "--output" -> withValue tail \v rest -> go (acc { output = v }) rest
       "--spec" -> withValue tail \v rest -> go (acc { spec = Just v }) rest
+      "--smt2-dir" -> withValue tail \v rest -> go (acc { smt2Dir = Just v }) rest
       name -> go (acc { moduleName = name }) tail
 
   withValue args f = case Array.uncons args of
     Just { head, tail } -> f head tail
     Nothing -> Left "missing value for option"
 
-  usage = "usage: lps verify --output <dir> <ModuleName> [--spec <file>]"
+  usage = "usage: lps verify --output <dir> <ModuleName> [--spec <file>] [--smt2-dir <dir>]"
 
 dirname :: String -> String
 dirname p = case lastIndexOf (Pattern "/") p of
@@ -82,13 +90,19 @@ run a = do
           error (specPath <> ": " <> msg)
           setExitCode 2
         Right spec -> do
+          for_ a.smt2Dir \dir -> mkdir' dir { recursive: true, mode: permsAll }
           verdicts <- for (checkModule mod spec) \fn -> do
             let qualified = mod.name <> "." <> fn.fnName
             case fn.result of
               Left msg -> pure (Errored qualified msg)
               Right obligations -> do
-                results <- for obligations \o -> do
-                  verdict <- solve (Smt.render { decls: o.decls, assumps: o.assumps, goal: o.goal })
+                results <- forWithIndex obligations \i o -> do
+                  let script = Smt.render { decls: o.decls, assumps: o.assumps, goal: o.goal }
+                  for_ a.smt2Dir \dir ->
+                    writeTextFile UTF8
+                      (dir <> "/" <> fn.fnName <> "-" <> show i <> ".smt2")
+                      (script <> "\n")
+                  verdict <- solve script
                   pure { o, verdict }
                 pure (summarize mod qualified results)
           for_ verdicts (log <<< renderFn)

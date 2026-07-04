@@ -5,5 +5,16 @@ Demo.bad  ✗ UNSAFE
     counterexample: n = 0
 Demo.clamp  ✓ SAFE
 Demo.double  ✓ SAFE
-Demo.low  ? UNSUPPORTED — cannot embed call to Demo.min (outside the slice fragment)
+Demo.low  ? UNSUPPORTED — cannot embed call to Demo.min (outside the supported fragment)
 Demo.sign  ✓ SAFE
+P1.callBad  ✗ UNSAFE
+    at src/P1.purs:21:13
+    cannot prove: (n >= 0)
+    counterexample: n = (- 1)
+P1.callGood  ✓ SAFE
+P1.dist  ✓ SAFE
+P1.inc  ✓ SAFE
+P1.low2  ✓ SAFE
+P1.myAbs  ✓ SAFE
+P1.size  ✓ SAFE
+P1.sumTo  ✓ SAFE
